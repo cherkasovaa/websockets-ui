@@ -1,5 +1,5 @@
 import { styleText } from 'util';
-import { Message, MSG_TYPE } from '../types';
+import { Message, MSG_TYPE } from '../types/message.types';
 
 export default class Logger {
   private prefix: string;

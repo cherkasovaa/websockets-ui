@@ -1,12 +1,17 @@
 import 'dotenv/config';
 import process from 'process';
-import { WebSocketServer } from 'ws';
+import { RawData, WebSocketServer } from 'ws';
 import Logger from '../logger/Logger';
+import PlayerService from '../services/PlayerService';
+import MessageHandler from './MessageHandler';
 
-const PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT) : 8080;
+const PORT = process.env.WS_PORT ? parseInt(process.env.WS_PORT) : 3000;
+
+const logger = new Logger('WS');
+const playerService = new PlayerService(logger);
+const messageHandler = new MessageHandler(logger, playerService);
 
 const wss = new WebSocketServer({ port: PORT });
-const logger = new Logger('WS');
 
 wss.on('connection', function connection(ws) {
   logger.log('Client connected');
@@ -15,8 +20,8 @@ wss.on('connection', function connection(ws) {
     logger.error(err.message);
   });
 
-  ws.on('message', function message(data) {
-    logger.log(`received: ${data}`);
+  ws.on('message', function message(data: RawData) {
+    messageHandler.handleMessage(ws, data.toString());
   });
 
   ws.on('close', function close() {
