@@ -1,7 +1,10 @@
 import { WebSocket } from 'ws';
 import Logger from '../logger/Logger';
+import Game from '../models/Game';
 import Player from '../models/Player';
 import Room from '../models/Room';
+import Ship from '../models/Ship';
+import GameService from '../services/GameService';
 import PlayerService from '../services/PlayerService';
 import RoomService from '../services/RoomService';
 import {
@@ -11,22 +14,27 @@ import {
   WSRequest,
   WSResponse,
 } from '../types/server.types';
+import { ShipData } from '../types/ship.types';
 
 export default class MessageHandler {
   private logger: Logger;
   private playerService: PlayerService;
   private roomService: RoomService;
+  private gameService: GameService;
   private connections: Map<WebSocket, Player> = new Map();
   private roomConnections: Map<WebSocket, Room> = new Map();
+  private gameConnections: Map<WebSocket, Game> = new Map();
   private clients: Set<WebSocket> = new Set();
 
   constructor(
     logger: Logger,
     playerService: PlayerService,
     roomService: RoomService,
+    gameService: GameService,
   ) {
     this.playerService = playerService;
     this.roomService = roomService;
+    this.gameService = gameService;
     this.logger = logger;
   }
 
@@ -46,6 +54,9 @@ export default class MessageHandler {
         case SERVER_TYPES.ADD_USER_TO_ROOM:
           this.handleAddUserToRoom(ws, message.data);
           this.broadcastUpdateRoom();
+          break;
+        case SERVER_TYPES.ADD_SHIPS:
+          this.handleAddShips(ws, message.data);
           break;
         default:
           this.logger.error(`Unknown command type: ${message.type}`);
@@ -108,7 +119,7 @@ export default class MessageHandler {
     this.roomConnections.set(ws, room);
   }
 
-  private handleAddUserToRoom(ws: WebSocket, data: string) {
+  private handleAddUserToRoom(ws: WebSocket, data: string): void {
     const requestData = JSON.parse(data);
     const indexRoom: string = requestData.indexRoom;
 
@@ -144,6 +155,11 @@ export default class MessageHandler {
       this.logger.error('Player not found for this connection');
       return;
     }
+
+    const game = this.gameService.createGame(indexRoom, firstPlayer, player);
+
+    this.gameConnections.set(firstPlayerWS, game);
+    this.gameConnections.set(ws, game);
 
     const response1: WSResponse = {
       type: SERVER_TYPES.CREATE_GAME,
@@ -183,5 +199,85 @@ export default class MessageHandler {
         client.send(message);
       }
     });
+  }
+
+  public handleAddShips(ws: WebSocket, data: string): void {
+    const game = this.gameConnections.get(ws);
+
+    if (!game) {
+      this.logger.error('Game not found for this connection');
+      return;
+    }
+
+    const requestData = JSON.parse(data);
+    const { gameId, ships: shipsData, indexPlayer } = requestData;
+
+    const ships: Ship[] = shipsData.map(
+      (data: ShipData) =>
+        new Ship(data.position, data.direction, data.length, data.type),
+    );
+
+    this.gameService.addShips(gameId, indexPlayer, ships);
+    this.logger.log(`Player ${indexPlayer} added ships to game ${gameId}`);
+
+    if (this.gameService.isGameReady(gameId)) {
+      this.startGame(game);
+    }
+  }
+
+  public startGame(game: Game): void {
+    const playersWSList: WebSocket[] = [];
+
+    for (const [ws, g] of this.gameConnections.entries()) {
+      if (g.id === game.id) {
+        playersWSList.push(ws);
+      }
+    }
+
+    playersWSList.forEach((ws) => {
+      const player = this.connections.get(ws);
+
+      if (!player) return;
+
+      const playerShips = game.getPlayerShips(player.id);
+
+      const shipsData: ShipData[] = playerShips.map((playerShip) => ({
+        position: playerShip.position,
+        direction: playerShip.direction,
+        length: playerShip.length,
+        type: playerShip.type,
+      }));
+
+      const response: WSResponse = {
+        type: SERVER_TYPES.START_GAME,
+        data: JSON.stringify({
+          ships: shipsData,
+          currentPlayerIndex: player.id,
+        }),
+        id: 0,
+      };
+
+      ws.send(JSON.stringify(response));
+    });
+
+    this.sendTurn(game);
+  }
+
+  public sendTurn(game: Game): void {
+    const currentPlayerId = game.currentPlayerId;
+
+    for (const [ws, g] of this.gameConnections.entries()) {
+      if (g.id === game.id) {
+        const response: WSResponse = {
+          type: SERVER_TYPES.TURN,
+          data: JSON.stringify({
+            currentPlayer: currentPlayerId,
+          }),
+          id: 0,
+        };
+
+        ws.send(JSON.stringify(response));
+      }
+    }
   }
 }

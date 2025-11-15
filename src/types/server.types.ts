@@ -5,6 +5,9 @@ export const SERVER_TYPES = {
   ADD_USER_TO_ROOM: 'add_user_to_room',
   UPDATE_ROOM: 'update_room',
   CREATE_GAME: 'create_game',
+  ADD_SHIPS: 'add_ships',
+  START_GAME: 'start_game',
+  TURN: 'turn',
 } as const;
 
 export type ServerTypes = (typeof SERVER_TYPES)[keyof typeof SERVER_TYPES];
