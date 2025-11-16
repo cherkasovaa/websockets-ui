@@ -45,9 +45,9 @@ export default class Ship {
 
     for (let i = 0; i < this._length; i++) {
       if (this._direction) {
-        cells.push({ x: this._position.x + i, y: this._position.y });
-      } else {
         cells.push({ x: this._position.x, y: this._position.y + i });
+      } else {
+        cells.push({ x: this._position.x + i, y: this._position.y });
       }
     }
 
