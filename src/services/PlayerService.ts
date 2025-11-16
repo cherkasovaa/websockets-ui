@@ -51,8 +51,10 @@ export default class PlayerService {
     };
   }
 
-  public getPlayerById(name: string): Player | undefined {
-    return this.players.get(name);
+  public getPlayerById(playerId: string): Player | undefined {
+    return Array.from(this.players.values()).find(
+      (player) => player.id === playerId,
+    );
   }
 
   public getWinners(): { name: string; wins: number }[] {
