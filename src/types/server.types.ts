@@ -8,6 +8,9 @@ export const SERVER_TYPES = {
   ADD_SHIPS: 'add_ships',
   START_GAME: 'start_game',
   TURN: 'turn',
+  ATTACK: 'attack',
+  RANDOM_ATTACK: 'randomAttack',
+  FINISH: 'finish',
 } as const;
 
 export type ServerTypes = (typeof SERVER_TYPES)[keyof typeof SERVER_TYPES];

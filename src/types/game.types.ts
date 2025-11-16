@@ -5,3 +5,5 @@ export interface GamePlayer {
   player: Player;
   ships: Ship[];
 }
+
+export type AttackStatus = 'miss' | 'shot' | 'killed';

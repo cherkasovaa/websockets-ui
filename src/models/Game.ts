@@ -1,4 +1,4 @@
-import { GamePlayer } from '../types/game.types';
+import { AttackStatus, GamePlayer } from '../types/game.types';
 import Player from './Player';
 import Ship from './Ship';
 
@@ -67,5 +67,44 @@ export default class Game {
     }
 
     return null;
+  }
+
+  public attack(
+    x: number,
+    y: number,
+  ): {
+    status: AttackStatus;
+    killedShip: Ship | null;
+  } {
+    const enemy = Array.from(this.players.values()).find(
+      (player) => player.player.id !== this.currentPlayerId,
+    );
+
+    if (!enemy) {
+      throw new Error('The user for attack is not found');
+    }
+
+    for (const ship of enemy.ships) {
+      const isHit = ship.hit({ x, y });
+
+      if (isHit) {
+        if (ship.isKilled) {
+          return {
+            status: 'killed',
+            killedShip: ship,
+          };
+        } else {
+          return {
+            status: 'shot',
+            killedShip: null,
+          };
+        }
+      }
+    }
+
+    return {
+      status: 'miss',
+      killedShip: null,
+    };
   }
 }

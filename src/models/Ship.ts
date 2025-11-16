@@ -54,7 +54,7 @@ export default class Ship {
     return cells;
   }
 
-  public hit({ x, y }: Position) {
+  public hit({ x, y }: Position): boolean {
     const occupiedCells = this.getOccupiedCells();
 
     const isHit = occupiedCells.some((cell) => cell.x === x && cell.y === y);
@@ -71,5 +71,33 @@ export default class Ship {
 
     this.hits.push({ x, y });
     return true;
+  }
+
+  public getCellsAround(): Position[] {
+    const cells: Position[] = [];
+    const occupied = this.getOccupiedCells();
+
+    occupied.forEach((cell) => {
+      for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+          const x = cell.x + dx;
+          const y = cell.y + dy;
+
+          if (x >= 0 && x < 10 && y >= 0 && y < 10) {
+            const isShipCell = occupied.some((c) => c.x === x && c.y === y);
+
+            if (!isShipCell) {
+              const shouldAdd = cells.some((c) => c.x === x && c.y === y);
+
+              if (!shouldAdd) {
+                cells.push({ x, y });
+              }
+            }
+          }
+        }
+      }
+    });
+
+    return cells;
   }
 }

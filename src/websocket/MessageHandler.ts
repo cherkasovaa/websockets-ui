@@ -7,6 +7,7 @@ import Ship from '../models/Ship';
 import GameService from '../services/GameService';
 import PlayerService from '../services/PlayerService';
 import RoomService from '../services/RoomService';
+import { AttackStatus } from '../types/game.types';
 import {
   AvailableRooms,
   RegResponseData,
@@ -57,6 +58,12 @@ export default class MessageHandler {
           break;
         case SERVER_TYPES.ADD_SHIPS:
           this.handleAddShips(ws, message.data);
+          break;
+        case SERVER_TYPES.ATTACK:
+          this.handleAttack(message.data);
+          break;
+        case SERVER_TYPES.RANDOM_ATTACK:
+          this.handleRandomAttack(message.data);
           break;
         default:
           this.logger.error(`Unknown command type: ${message.type}`);
@@ -279,5 +286,131 @@ export default class MessageHandler {
         ws.send(JSON.stringify(response));
       }
     }
+  }
+
+  public handleAttack(data: string): void {
+    const requestData = JSON.parse(data);
+    const { gameId, x, y, indexPlayer } = requestData;
+
+    const game = this.gameService.findGame(gameId);
+
+    if (!game) {
+      this.logger.error(`The game with ID=${gameId} is not found`);
+      return;
+    }
+
+    if (game.currentPlayerId !== indexPlayer) {
+      this.logger.error(`Not turn on player with ID=${indexPlayer}`);
+      return;
+    }
+
+    const result = game.attack(x, y);
+
+    this.broadcastAttack(game, x, y, indexPlayer, result.status);
+
+    if (result.status === 'killed' && result.killedShip) {
+      const cellsAround = result.killedShip.getCellsAround();
+
+      cellsAround.forEach((cell) => {
+        this.broadcastAttack(game, cell.x, cell.y, indexPlayer, 'miss');
+      });
+    }
+
+    if (result.status === 'miss') {
+      game.switchTurn();
+      this.sendTurn(game);
+    }
+
+    const winner = game.checkWinner();
+
+    if (winner) {
+      this.handleGameFinish(game, winner);
+    }
+  }
+
+  public broadcastAttack(
+    game: Game,
+    x: number,
+    y: number,
+    indexPlayer: number | string,
+    status: AttackStatus,
+  ): void {
+    const response: WSResponse = {
+      type: SERVER_TYPES.ATTACK,
+      data: JSON.stringify({
+        position: {
+          x,
+          y,
+        },
+        currentPlayer: indexPlayer,
+        status,
+      }),
+      id: 0,
+    };
+
+    const message = JSON.stringify(response);
+
+    for (const [ws, g] of this.gameConnections.entries()) {
+      if (g.id === game.id) {
+        ws.send(message);
+      }
+    }
+  }
+
+  public handleRandomAttack(data: string) {
+    const requestData = JSON.parse(data);
+
+    const { gameId, indexPlayer } = requestData;
+
+    const x = Math.floor(Math.random() * 10);
+    const y = Math.floor(Math.random() * 10);
+
+    this.handleAttack(JSON.stringify({ gameId, x, y, indexPlayer }));
+  }
+
+  public handleGameFinish(game: Game, winnerId: string) {
+    const winner = this.playerService.getPlayerById(winnerId);
+
+    if (winner) {
+      winner.addWins();
+    }
+
+    const response: WSResponse = {
+      type: SERVER_TYPES.FINISH,
+      data: JSON.stringify({
+        winPlayer: winnerId,
+      }),
+      id: 0,
+    };
+
+    const message = JSON.stringify(response);
+
+    for (const [ws, g] of this.gameConnections.entries()) {
+      if (g.id === game.id) {
+        ws.send(message);
+      }
+    }
+
+    this.broadcastUpdateWinners();
+
+    this.gameService.removeGame(game.id);
+  }
+
+  public broadcastUpdateWinners(): void {
+    const winners = this.playerService.getWinners();
+
+    const response: WSResponse = {
+      type: SERVER_TYPES.UPDATE_WINNERS,
+      data: JSON.stringify(winners),
+      id: 0,
+    };
+
+    const message = JSON.stringify(response);
+
+    this.clients.forEach((client) => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    });
   }
 }
